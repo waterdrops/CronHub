@@ -42,11 +42,17 @@
 		</property>
 	</bean>
 	<bean id="communicateDetect" class="org.cronhub.managesystem.modules.daemon.boot.CommunicateDetect">
+		<property name="userDao">
+			<ref bean="userDao" />
+		</property>
 		<property name="daemonDao">
 			<ref bean="daemonDao"/>
 		</property>
 		<property name="email">
 			<ref bean="emailUtils"/>
+		</property>
+		<property name="sinaAlert">
+			<ref bean="sinaAlertUtils"/>
 		</property>
 	</bean>
 </beans>

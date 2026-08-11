@@ -11,7 +11,13 @@
 		<property name="dao">
 			<ref bean="taskDao"/>
 		</property>
+		
+		<property name="taskUserDao">
+			<ref bean="taskUserDao" />
+		</property>
+		
 	</bean>
+	
 	<bean id="taskPageViewAction" class="org.cronhub.managesystem.modules.task.action.PageViewAction">	
 		<property name="dao">
 			<ref bean="taskDao"/>
@@ -47,6 +53,9 @@
 		</property>
 		<property name="processor">
 			<ref bean="remoteExecuteProcessor"/>
+		</property>
+		<property name="sinaAlert">
+			<ref bean="sinaAlertUtils"/>
 		</property>
 	</bean>
 	<bean id="immediateRemoteExecAction" class="org.cronhub.managesystem.modules.task.action.ImmediateRemoteExecuteAction">

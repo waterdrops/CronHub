@@ -20,13 +20,50 @@ String basePath = request.getScheme()+"://"+request.getServerName()+":"+request.
 <script type="text/javascript" src="/res/js/utils/json2.js"></script>
 <script type="text/javascript" src="/res/js/utils/string_utils.js"></script>
 <link rel="stylesheet" type="text/css" href="/res/skin/all.css" />
+<style type="text/css">
+.area {
+    position: absolute;
+    color: #838B8B;
+    font-weight: bold;
+    width:200px;
+    display: none;
+    opacity:0.4; /*鼠标没有移动上去时，透明度为40% */
+	filter:alpha(opacity=40); /* 针对 IE8 以及更早的版本 */
 
+    /* you may want to set the width/height here as well*/
+}
+
+/***
+.area:hover {  // 鼠标移上去时，变得不透明
+	opacity:1.0;
+	filter:alpha(opacity=100); // 针对 IE8 以及更早的版本
+}
+***/
+
+.fixed {
+    position: absolute;
+    width:200px;
+    top: 20px;
+    left: 20px;
+    border: 1px solid #9AC0CD;
+    padding: 5px;
+    z-index: 100px;
+    background-color: #B0B0B0;
+}
+</style>
 <script>
 var dialog = null;
 
 $(function() {
+	$('.area').hover(function(){$(this).fadeTo(1000,1.0);}, function(){$(this).fadeTo(1000,0.3);});
+	
 	// grid contextmenu，注释掉的是禁用部分菜单项，更改菜单项图标和文字的例子
-	$('.grid tbody tr').contextMenu([
+	$('.grid tbody tr').not('.hiddenReturnStr').contextMenu([
+	        /***
+	        {'复制(ctrl+c)':{id:$(this).attr("id"),icon:'/res/icons/16x16/comment.png',onclick:function(){
+	        	
+	        }}},
+	        ***/
 			{'查看该task任务的简介':{id:$(this).attr("id"),icon:'/res/icons/16x16/comment.png',onclick:function(){
 				var _this = this;
 				var comment = $("#task_comment_"+_this.id).html();
@@ -42,7 +79,9 @@ $(function() {
 			{'执行命令':{id:$(this).attr("id"),icon:'/res/icons/16x16/application_osx_terminal.png',onclick:function(){
 				var _this = this;
 				var message = $("#btnRedo").attr("message");
-				redoRemoteExec(_this.id,message);
+				Dialog.confirm(message,function(){
+					redoRemoteExec(_this.id);
+				});
 			}}}
 		]/*,
 		{
@@ -65,7 +104,11 @@ $(function() {
 	);
 	
 	
-	
+	$("tr.hiddenReturnStr").contextMenu([
+		{'折叠收起':{id:$(this).attr("title"),icon:'/res/icons/16x16/table_sort.png',onclick:function(){
+			var _this = this;
+			$(".imgUnfoldReturnStr[alt='"+_this.title+"']").click();
+		}}},]);                                   
 	
 	//string的replaceAll方法
 	
@@ -98,7 +141,7 @@ $(function() {
 function hideLongText(){
 	$(".grid tbody td.cmdClass").each(function(){
 		var innerStr = $(this).text();
-		if(innerStr.length>10){
+		if(innerStr.length>18){
 			var ellipsis = $("<span class='toolbar' title='"+innerStr+"' name='unfoldBtn'><a>...</a></span>").click(function(){
 				var wholeStr = $(this).attr('title');
 				var currentFold = $(this).parent().contents().clone(true);
@@ -109,7 +152,7 @@ function hideLongText(){
 				});
 				$(this).parent().html(wholeStr).append(foldBtn);
 			});
-			var shortStr = innerStr.substr(0,10);
+			var shortStr = innerStr.substr(0,18);
 			$(this).html(shortStr).append(ellipsis);
 		}
 	});
@@ -124,18 +167,21 @@ function redoBtnClick(){
 	if(checkCount<=0){
 		Dialog.alert("请选中至少一条记录进行操作");
 		return;
+	}else{
+		Dialog.confirm("确定重新执行?",function(){
+		var message = $(this).attr("message");
+		$('.grid tbody input[type=checkbox]').each(function(i, o) {
+			if($(o).attr('checked')){
+				var id = $(o).val();
+				redoRemoteExec(id);	
+			}
+		});
+		});
 	}
-	var message = $(this).attr("message");
-	$('.grid tbody input[type=checkbox]').each(function(i, o) {
-		if($(o).attr('checked')){
-			var id = $(o).val();
-			redoRemoteExec(id,message);	
-		}
-	});
 }
-function redoRemoteExec(id,message){
-	Dialog.confirm(message,function(){
-		var tableName = $("#hidden_tableName").html();
+
+function redoRemoteExec(id){
+	var tableName = $("#hidden_tableName").html();
 	var loadingImg = "<img src='/res/images/gif/loading.gif'/>";
 	$("tr[id='"+id+"'] span[class][class!='toolbar']").html(loadingImg);
 			$.ajax({
@@ -160,7 +206,6 @@ function redoRemoteExec(id,message){
 					}
 				}
 			});	
-});
 }
 //命令展开与命令折叠
 function cmdfoldreverse(event){
@@ -194,22 +239,70 @@ function getCheckCount(){
 	}
 	return true;
 }
+
+//动态生成grep过滤输入框, return jq elem
+//形参: returnStr:需要被过滤的字符串 , float_elem:点击加号图标(为了获取鼠标位置),  target_elem:需要替换成标红结果的text element
+function generateGrep(returnStr, float_elem, target_elem){
+	
+	//获取坐标
+	var offsetTop=$(float_elem).offset().top;
+	var offsetLeft=$(float_elem).offset().left;
+	offsetTop += 20;
+	
+	$(".area .fixed").css({"top" : offsetTop + "px", "left": offsetLeft + "px"});
+	$("#grepDiv").show();
+	$("#grepInput").val("").focus().keydown(function(e){
+        var curKey = e.which;
+        if(curKey == 13){
+            $("#btnGrep").click();
+            return false;
+        }
+	});
+	
+	$("#btnGrep").unbind("click").click(function(){
+		if($("#grepInput").val().replace(/(^\s*)|(\s*$)/g, "") == ""){
+			target_elem.html(returnStr);
+		}else{
+			 var new_str = "" ;
+             var search = $("#grepInput").val();
+             var reg=new RegExp("("+ search.split(" ").join(").*(" ) + ")" ,"g"); //如果用户敲入空格分割的string，则(use).*(time).*(abc)这种形式的正则表达式
+             $.each(returnStr.split( "<br/>" ), function() {
+                    if(this.match(reg)){ //每一行都是this --> line string
+                    	var new_line = this;
+                    	
+                    	for(var kwd_index =0;kwd_index <  search.split(' ').length;kwd_index++){
+                    		var kwd = search.split(' ')[kwd_index];
+                    		var repl_kwd = new RegExp("("+kwd+")","g");
+                    		new_line = new_line.replace(repl_kwd, "<font color='red'>$1</font>"); //只标红特定的单词
+                    	}
+                         new_str += new_line + "<br />" ;
+                   }
+         	});
+            target_elem.html(new_str);
+
+		}
+	});
+}
+
 function imgReturnStrClick(){
-	$(".imgUnfoldReturnStr").click(function(){
+	$(".imgUnfoldReturnStr").click(function(event){
+		
 		var id = $(this).attr("alt");
 		var title  = $(this).attr("title");
 		if ("close" == title){
-			showReturnStrItem(id);
+			showReturnStrItem($(this),id);
 			$(this).attr("title","open");
 			$(this).attr("src","/res/icons/16x16/minus.png");
 		}else if("open" == title){
 			$(".hiddenReturnStr[name='"+id+"']").hide();
+			
+			$("#grepDiv").hide();
 			$(this).attr("title","close");
 			$(this).attr("src","/res/icons/16x16/plus.png");
 		}
 	});
 }
-function showReturnStrItem(id){
+function showReturnStrItem(float_elem, id){
 	var tableName = $("#hidden_tableName").html();
 	$(".hiddenReturnStr[name='"+id+"'] img[name='loading']").show();
 	$(".hiddenReturnStr[name='"+id+"'] span[name='returnStrSpan']").hide();
@@ -235,6 +328,8 @@ function showReturnStrItem(id){
 			return_str = return_str.replaceAll(" ","&nbsp;",false).replaceAll("\n","<br/>",false);
 			$(".hiddenReturnStr[name='"+ret_id+"'] img[name='loading']").hide();
 			$(".hiddenReturnStr[name='"+ret_id+"'] span[name='returnStrSpan']").html(return_str).show();
+			
+			generateGrep(return_str, float_elem, $(".hiddenReturnStr[name='"+ret_id+"'] span[name='returnStrSpan']"));
 		}
 	});	
 }
@@ -278,6 +373,14 @@ img[src="/res/icons/16x16/magnifier.png"]{
 </head>
 
 <body>
+
+<div id="grepDiv" class="toolbar area" >
+    <div class="fixed">
+	<input id="grepInput" type="text" class="input-shorttext"/> <a id="btnGrep"><img src="/res/icons/16x16/script.png" />grep</a>
+	</div>
+</div>
+
+
 	<div class="tab">
 		<a class="tab-selected"><img src="/res/icons/16x16/application_side_list.png" />当天任务列表</a>
 		<a style="display:none"><img src="/res/icons/16x16/application_side_list.png" />所有日期任务列表</a>
@@ -306,37 +409,43 @@ img[src="/res/icons/16x16/magnifier.png"]{
 				<th><span>cron_exp</span></th>
 				<th><span>真实命令</span></th>
 				<th><span>运行时长</span></th>
-				<th><span>执行开始时间</span></th>
-				<th><span>执行结束时间</span></th>
+				<th><span>执行时段</span></th>
+				<!-- 
 				<th><span><select name="filter_state_run_mode" trigger="change" stat="equal" trigger_target="this"><option value="-1">模式</option><option  value="0">被动</option><option value="1">主动</option></select></span></th>
+				 -->
 				<th><span><select name="filter_state_exec_type" trigger="change" stat="equal" trigger_target="this"><option value="-1">执行类型</option><option  value="0">crontab执行</option><option value="1">手动重执行</option><option value="2">自动重执行</option><option value="3">当场执行</option></select></span></th>
+				<!-- 
 				<th><span><select name="filter_state_is_process_node" trigger="change" stat="equal" trigger_target="this"><option value="-1">任务类型</option><option  value="0">单任务</option><option value="1">流程节点</option></select></span></th>
-				<th><span>重执行次数</span></th>
-				<th><span>截止次数</span></th>
+				 -->
+				<th><span>重执行</span></th>
+				<th><span>备注</span></th>
 			</tr>
 			
 		</thead>
 		<tbody>
 		<s:iterator value="#request.beanlist" id="recordbean" status="stat">
-			<tr id="<s:property value='#recordbean.id' />">
+			<tr id="<s:property value='#recordbean.id' />" title="<s:property value='#recordbean.task.usersISO' />">
 				<td align="center"><span><input type="checkbox" value="<s:property value='#recordbean.id' />" /></span></td>
 				<td align="center"><span><s:property value="#recordbean.id" /></span></td>
 				<td align="center"><span><s:property value="#recordbean.task_id" /></span></td>
 				<td align="center"><span class="complete_stats"><s:property escape="false" value="#recordbean.complete_success_ISO"/></span><img alt="<s:property value='#recordbean.id' />" class="imgUnfoldReturnStr" title='close' style="cursor:pointer" src="/res/icons/16x16/plus.png" /></td>
 				<td align="center"><span class="exit_code"><s:property escape="false" value="#recordbean.exit_code_ISO" /></span></td>
-				<td align="center"><span><s:property value="#recordbean.task.daemon.machine_ip" /></span></td>
+				<td align="center" title="<s:property value='#recordbean.task.daemon.daemon_version_name' />"><span><s:property value="#recordbean.task.daemon.machine_ip" /></span></td>
 				<td align="center"><span><s:property value="#recordbean.task.cron_exp"/></span></td>
 				<td align="center" class="cmdClass"><s:property value="#recordbean.real_cmd"/></td>
 				<td align="center"><span class="duration"><s:property escape="false" value="#recordbean.duration_ISO"/></span></td>
-				<td align="center"><span class="start_datetime"><s:property escape="false" value="#recordbean.start_datetime_ISO"/></span></td>
-				<td align="center"><span class="end_datetime"><s:property escape="false" value="#recordbean.end_datetime_ISO"/></span></td>
+				<td align="center"><span class="datetime_interval"><s:property escape="false" value="#recordbean.datetime_interval_ISO"/></span></td>
+				<!-- 
 				<td align="center"><span><s:if test="#recordbean.task.run_mode==true"><font style="color:green">主动</font></s:if><s:else><font style="color:#D2691E">被动</font></s:else></span></td>
+				 -->
 				<td align="center"><span class="exec_type"><s:property escape="false" value="#recordbean.exec_type_ISO"/></span></td>
+				<!-- 
 				<td align="center"><span><s:if test="#recordbean.task.is_process_node==true">流程节点</s:if><s:else>单任务</s:else></span></td>
-				<td align="center"><span><s:property value="#recordbean.current_redo_times"/></span></td>
-				<td align="center"><span><s:property value="#recordbean.task.end_redo_times"/></span></td>
+				 -->
+				<td align="center"><span><s:property value="#recordbean.current_redo_times"/></span>&#47;<span><s:property value="#recordbean.task.end_redo_times"/></span></td>
+				<td align="center" class="cmdClass"><span><s:property value='#recordbean.task.comment' /></span></span></td>
 			</tr>
-			<tr class='hiddenReturnStr' style='display:none' name='<s:property value="#recordbean.id" />'><td align="center"><span><img  alt="<s:property value='#recordbean.id' />" src='/res/icons/16x16/comment_up.png' class="imgHideReturnStr" style="cursor:pointer"/></span></td><td colspan="15" ><span><img name="loading" src='/res/images/gif/loading.gif'/><span name="returnStrSpan"></span></span></td></tr>
+			<tr class='hiddenReturnStr' style='display:none' title='<s:property value="#recordbean.id" />' name='<s:property value="#recordbean.id" />'><td align="center"><span><img  alt="<s:property value='#recordbean.id' />" src='/res/icons/16x16/comment_up.png' class="imgHideReturnStr" style="cursor:pointer"/></span></td><td colspan="15" ><span><img name="loading" src='/res/images/gif/loading.gif'/><span name="returnStrSpan"></span></span></td></tr>
 			<div id="task_comment_<s:property value='#recordbean.id' />" style="display:none"><s:property value='#recordbean.task.comment' /></div>
 			<div id="daemon_comment_<s:property value='#recordbean.id' />" style="display:none"><s:property value='#recordbean.task.daemon.comment' /></div>
 		</s:iterator>

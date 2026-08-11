@@ -108,13 +108,11 @@ if [ ! -e $daemon_jar_path ];
 then
     wget $daemon_url;
 fi;
-ps_num=`ps -ef|grep $jar_name|grep $daemon_port|grep -v grep|grep -v sh|wc -l`;
-if [ $ps_num -gt 0 ];
+
+#shutdown previous cronhub daemon
+if [ -e /etc/init.d/cronhub_daemon ];
 then
-    kill_pid=`ps -ef|grep $jar_name|grep $daemon_port|grep -v grep|grep -v sh|awk -F ' ' '{print $2}'`;
-    echo "kill  "$kill_pid" .process numer is "$ps_num;
-    kill $kill_pid;
-    echo "killing service to reboot service...";
+    /sbin/service cronhub_daemon stop;
     sleep 2;
 fi;
 
@@ -124,16 +122,31 @@ echo -e "#description:cronhub_daemon
 #chkconfig:231 80 80
 case \"\$1\" in
 start)
-\t${install_path}/jsvc/jsvc -home ${install_path}/jdk1.6.0_30 -Xmx2000m -pidfile ${install_path}/$daemon_port.pid -cp ${install_path}/DispatchSystemDaemon.jar com.baofeng.dispatchexecutor.boot.DaemonBoot -p $daemon_port
+\tif [ ! -x ${install_path}/jsvc/jsvc -o ! -w ${install_path} ];then
+\techo \"error!You don't have permission to execute ${install_path}/jsvc/jsvc OR to write pid_file in ${install_path} ,please check!\";
+\texit 1;
+\tfi;
+\t${install_path}/jsvc/jsvc -home ${java_home} -Xmx2000m -pidfile ${install_path}/$daemon_port.pid -cp ${install_path}/DispatchSystemDaemon.jar com.baofeng.dispatchexecutor.boot.DaemonBoot -p $daemon_port
+\techo \"starting cronhub daemon service...\"
+\t;;
+stop)
+\tkill \$(cat ${install_path}/$daemon_port.pid);
+\techo \"shutdown cronhub daemon service...\";
+\t;;
+restart)
+\t/sbin/service cronhub_daemon stop;
+\tsleep 2;
+\t/sbin/service cronhub_daemon start;
 \t;;
 esac
 " > /etc/init.d/cronhub_daemon
 /sbin/chkconfig --add cronhub_daemon
+
 #start daemon
 echo "adding to service done,now start daemon service..."
 chmod +x /etc/init.d/cronhub_daemon
 /sbin/service cronhub_daemon start
-echo "all done"
+echo "all done! now you can use /sbin/service cronhub_daemon [start|stop|restart] to boot."
 #the final start cmd
 #$jsvc_target_bin -home $java_home -Xmx2000m -pidfile $install_path"/"$daemon_port".pid" -cp $daemon_jar_path com.baofeng.dispatchexecutor.boot.DaemonBoot -p $daemon_port
 

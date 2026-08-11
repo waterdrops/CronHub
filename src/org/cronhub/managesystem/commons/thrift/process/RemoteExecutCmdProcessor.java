@@ -89,7 +89,7 @@ public class RemoteExecutCmdProcessor {
 		} catch (Exception e) {
 			record.setOn_processing(false);
 			record.setExec_type(execType);
-			if(execType != Params.EXECTYPE_AUTOREDO){
+			if(!execType.equals(Params.EXECTYPE_AUTOREDO)){
 				record.setStart_datetime(new Date());//不等于"自动重执行"类型时,重新设置初始时间
 			}else{//如果是"自动重执行"类型时,设置current_redo_times+1
 				record.setCurrent_redo_times(record.getCurrent_redo_times()+1);
@@ -104,6 +104,7 @@ public class RemoteExecutCmdProcessor {
 			errorJson.put(Params.PAGE_RECORD_DURATION, record.getDuration_ISO());
 			//errorJson.put(Params.PAGE_RECORD_EXIT_CODE, record.getExit_code_ISO());
 			errorJson.put(Params.PAGE_RECORD_END_DATETIME,record.getEnd_datetime_ISO());
+			errorJson.put(Params.PAGE_RECORD_DATETIME_INTERVAL,record.getDatetime_interval_ISO());
 			errorJson.put(Params.PAGE_RECORD_EXEC_TYPE, record.getExec_type_ISO());
 			errorJson.put(Params.PAGE_RECORD_EXEC_RETURN_STR, record.getExec_return_str());
 			errorJson.put(Params.PAGE_RECORD_START_DATETIME, record.getStart_datetime_ISO());
@@ -142,10 +143,10 @@ public class RemoteExecutCmdProcessor {
 	 * 这个方法表示在点击"当场执行按钮"时以及"crontab时"的执行流程,从任务列表中拉出一个taskId去执行,但没有点击"重新执行"时让loading开始旋转的步骤
 	 * @param task 任务
 	 * @param exec_type 执行类型:0--crontab执行，1--手动重执行,2--自动重执行,3--当场执行等
-	 * @return
+	 * @return TaskRecordDone
 	 * @throws Exception
 	 */
-	public boolean remoteExecute(final Task task,final Integer exec_type) throws Exception{
+	public TaskRecordDone remoteExecute(final Task task,final Integer exec_type) throws Exception{
 		String machine_ip = task.getDaemon().getMachine_ip();
 		int machine_port =task.getDaemon().getMachine_port();
 		
@@ -211,7 +212,7 @@ public class RemoteExecutCmdProcessor {
 		doneRecordDao.insert(record);
 		undoRecordDao.deleteById(result.getTask_record_undo_id());
 		AppLogger.recordDoneLogger.info(String.format("execute type:%s done!ip:%s,port:%s.insert to record_done table.[start_datetime:%s,end_datetime:%s].Delete from record_undo table.record_undo_id=%s",Params.EXECTYPE_REPRESENT.get(exec_type),task.getDaemon().getMachine_ip(),task.getDaemon().getMachine_port(),sdf.format(record.getStart_datetime()),sdf.format(record.getEnd_datetime()),result.getTask_record_undo_id()));
-		return result.isSuccess();
+		return record;
 	}
 	/***
 	 * 这个方法表示在点击"当场执行按钮"时的执行流程,从任务列表中拉出一个taskId去执行,但没有点击"重新执行"时让loading开始旋转的步骤
@@ -219,7 +220,7 @@ public class RemoteExecutCmdProcessor {
 	 * @return
 	 * @throws Exception
 	 */
-	public boolean remoteExecuteOnSpot(final Long taskId) throws Exception{
+	public TaskRecordDone remoteExecuteOnSpot(final Long taskId) throws Exception{
 		FillConfig config = new FillConfig(true,true);
 		Task task = this.taskDao.findById(taskId,config);
 		return remoteExecute(task,Params.EXECTYPE_SPOT);
